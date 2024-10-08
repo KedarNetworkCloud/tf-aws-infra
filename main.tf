@@ -8,7 +8,7 @@ resource "aws_vpc" "main_vpc" {
   cidr_block       = var.vpc_cidr
 
   tags = {
-    Name = var.vpc_name  // This uses the VPC name from our .tfvars file. This is the name that would show up in the AWS console.
+    Name = "KedarMainVPC"  // This uses the VPC name from our .tfvars file. This is the name that would show up in the AWS console.
   }
 }
 
@@ -18,7 +18,7 @@ resource "aws_subnet" "public_subnet_1" {
   availability_zone       = var.subnet_1_zone
 
   tags = {
-    Name = "${var.vpc_name}-public-subnet-1"
+    Name = "Public Subnet 1"
   }
 }
 
@@ -28,7 +28,7 @@ resource "aws_subnet" "public_subnet_2" {
   availability_zone       = var.subnet_2_zone
 
   tags = {
-    Name = "${var.vpc_name}-public-subnet-2"
+    Name = "Public Subnet 2"
   }
 }
 
@@ -38,7 +38,7 @@ resource "aws_subnet" "public_subnet_3" {
   availability_zone       = var.subnet_3_zone
 
   tags = {
-    Name = "${var.vpc_name}-public-subnet-3"  
+    Name = "Public Subnet 3"  
   }
 }
 
@@ -49,7 +49,7 @@ resource "aws_subnet" "private_subnet_1" {
   availability_zone = var.subnet_1_zone
 
   tags = {
-    Name = "${var.vpc_name}-private-subnet-1"
+    Name = "Private Subnet 1"
   }
 }
 
@@ -59,7 +59,7 @@ resource "aws_subnet" "private_subnet_2" {
   availability_zone = var.subnet_2_zone
 
   tags = {
-    Name = "${var.vpc_name}-private-subnet-2"
+    Name = "Private Subnet 2"
   }
 }
 
@@ -69,7 +69,7 @@ resource "aws_subnet" "private_subnet_3" {
   availability_zone = var.subnet_3_zone
 
   tags = {
-    Name = "${var.vpc_name}-private-subnet-3"
+    Name = "Private Subnet 3"
   }
 }
 
@@ -78,7 +78,7 @@ resource "aws_internet_gateway" "internetGateway" {
   vpc_id = aws_vpc.main_vpc.id
 
   tags = {
-    Name = "${var.vpc_name}-internetgateway"
+    Name = "Internet Gateway"
   }
 }
 
@@ -92,7 +92,7 @@ resource "aws_route_table" "publicRouteTable" {
   }
 
   tags = {
-    Name = "${var.vpc_name}-private-subnet-route-table"
+    Name = "Public Route Table"
   }
 }
 
@@ -115,7 +115,7 @@ resource "aws_route_table" "privateRouteTable" {
   vpc_id = aws_vpc.main_vpc.id
 
   tags = {
-    Name = "${var.vpc_name}-private-subnet-route-table"
+    Name = "Private Route Table"
   }
 }
 

@@ -8,6 +8,7 @@ on:
 jobs:
   terraform:
     runs-on: ubuntu-latest
+    name: Terraform CI Validation  # This should show up in the Actions tab
 
     steps:
       - name: Checkout code
@@ -16,7 +17,7 @@ jobs:
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v2
         with:
-          terraform_version: 1.9.7  # My Terraform version on local machine
+          terraform_version: 1.9.7  # Your Terraform version on local machine
 
       - name: Initialize Terraform
         run: terraform init

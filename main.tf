@@ -33,7 +33,7 @@ resource "aws_subnet" "public_subnet_2" {
 }
 
 resource "aws_subnet" "public_subnet_3" {
-  vpc_id                  = aws_vpc.main_vpc.id
+  vpc_id                  = aws_vpc.main_vpc.bad
   cidr_block              = var.public_subnet_cidr_3
   availability_zone       = var.subnet_3_zone
 

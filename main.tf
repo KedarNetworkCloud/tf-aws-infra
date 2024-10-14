@@ -133,3 +133,63 @@ resource "aws_route_table_association" "private_subnet_association_3" {
   subnet_id      = aws_subnet.private_subnet_3.id
   route_table_id = aws_route_table.privateRouteTable.id
 }
+
+// Application Security Group
+resource "aws_security_group" "application_security_webapp_kedar" {
+  name        = "application_security_group"
+  description = "Security group for web application instances"
+  vpc_id      = aws_vpc.main_vpc.id
+
+  ingress {
+    from_port   = 22      # Allow SSH
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 80      # Allow HTTP
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443     # Allow HTTPS
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 8080     # Replace with your application's port
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "application security group"
+  }
+}
+
+# Create an EC2 Instance
+resource "aws_instance" "kedar_web_app_instance" {
+  ami                    = var.Kedar_AMI_ID  # Your custom AMI ID
+  instance_type         = "t2.micro"       # Adjust as necessary
+  subnet_id             = aws_subnet.public_subnet_1.id  # Use a subnet from your created VPC
+  key_name              = "AWSDEVSSHKEY" 
+  vpc_security_group_ids = [aws_security_group.application_security_webapp_kedar.id]  # Attach the security group
+
+  associate_public_ip_address = true  # Enable Public IP Assignment
+
+  root_block_device {
+    volume_size = 25  # Root volume size
+    volume_type = "gp2"  # General Purpose SSD
+    delete_on_termination = true  # EBS volume should be deleted on instance termination
+  }
+
+  tags = {
+    Name = "KedarWebAppInstance"
+  }
+}

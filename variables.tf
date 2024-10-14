@@ -64,3 +64,13 @@ variable "subnet_3_zone" {
   type        = string
   description = "Availability zone for public subnet 3 and private subnet 3"   
 }
+
+variable "Kedar_AMI_ID" {
+  type        = string
+  description = "AMID ID of the image I create using packer"   
+}
+
+variable "EC2_Instance_Type" {
+  type        = string
+  description = "Type of the AWS EC2 instance we are launching"   
+}

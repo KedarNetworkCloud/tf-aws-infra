@@ -13,7 +13,7 @@ resource "aws_vpc" "main_vpc" {
 }
 
 resource "aws_subnet" "public_subnet_1" {
-  vpc_id                  = aws_vpc.main_vpc.id
+  vpc_id                  =     aws_vpc.main_vpc.id
   cidr_block              = var.public_subnet_cidr_1
   availability_zone       = var.subnet_1_zone
 

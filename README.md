@@ -26,3 +26,5 @@ We will be using the following terraform commands to set up our AWS Networking i
 4. Terraform apply - It applies the changes required to reach the desired state of the infrastructure as defined in the Terraform configuration files.
 
 5. Terraform destroy - It destroys all the infrastructure set up by the Terraform by removing everything written in the configuration files.
+
+6. Code review done

@@ -159,9 +159,9 @@ from_port   = 443     # Allow HTTPS
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-  }
+}
 
-  ingress {
+ingress {
     from_port   = 8080     # Replace with your application's port
     to_port     = 8080
     protocol    = "tcp"

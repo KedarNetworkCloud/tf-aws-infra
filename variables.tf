@@ -52,25 +52,25 @@ variable "private_subnet_cidr_3" {
 
 variable "subnet_1_zone" {
   type        = string
-  description = "Availability zone for public subnet 1 and private subnet 1"   
+  description = "Availability zone for public subnet 1 and private subnet 1"
 }
 
 variable "subnet_2_zone" {
   type        = string
-  description = "Availability zone for public subnet 2 and private subnet 2"   
+  description = "Availability zone for public subnet 2 and private subnet 2"
 }
 
 variable "subnet_3_zone" {
   type        = string
-  description = "Availability zone for public subnet 3 and private subnet 3"   
+  description = "Availability zone for public subnet 3 and private subnet 3"
 }
 
 variable "Kedar_AMI_ID" {
   type        = string
-  description = "AMID ID of the image I create using packer"   
+  description = "AMID ID of the image I create using packer"
 }
 
 variable "EC2_Instance_Type" {
   type        = string
-  description = "Type of the AWS EC2 instance we are launching"   
+  description = "Type of the AWS EC2 instance we are launching"
 }

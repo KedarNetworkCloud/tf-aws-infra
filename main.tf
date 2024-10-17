@@ -175,7 +175,7 @@ resource "aws_security_group" "application_security_webapp_kedar" {
 
 # Create an EC2 Instance
 resource "aws_instance" "kedar_web_app_instance" {
-  ami                    = var.Kedar_AMI_ID.id           # Your custom AMI ID
+  ami                    = var.Kedar_AMI_ID              # Your custom AMI ID
   instance_type          = "t2.micro"                    # Adjust as necessary
   subnet_id              = aws_subnet.public_subnet_1.id # Use a subnet from your created VPC
   key_name               = "AWSDEMOROLESSH"

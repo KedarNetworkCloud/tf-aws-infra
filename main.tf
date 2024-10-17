@@ -5,17 +5,17 @@ provider "aws" {
 
 
 resource "aws_vpc" "main_vpc" {
-  cidr_block       = var.vpc_cidr
+  cidr_block = var.vpc_cidr
 
   tags = {
-    Name = "KedarMainVPC"  // This uses the VPC name from our .tfvars file. This is the name that would show up in the AWS console.
+    Name = "KedarMainVPC" // This uses the VPC name from our .tfvars file. This is the name that would show up in the AWS console.
   }
 }
 
 resource "aws_subnet" "public_subnet_1" {
-  vpc_id                  = aws_vpc.main_vpc.id
-  cidr_block              = var.public_subnet_cidr_1
-  availability_zone       = var.subnet_1_zone
+  vpc_id            = aws_vpc.main_vpc.id
+  cidr_block        = var.public_subnet_cidr_1
+  availability_zone = var.subnet_1_zone
 
   tags = {
     Name = "Public Subnet 1"
@@ -23,9 +23,9 @@ resource "aws_subnet" "public_subnet_1" {
 }
 
 resource "aws_subnet" "public_subnet_2" {
-  vpc_id                  = aws_vpc.main_vpc.id
-  cidr_block              = var.public_subnet_cidr_2
-  availability_zone       = var.subnet_2_zone
+  vpc_id            = aws_vpc.main_vpc.id
+  cidr_block        = var.public_subnet_cidr_2
+  availability_zone = var.subnet_2_zone
 
   tags = {
     Name = "Public Subnet 2"
@@ -33,12 +33,12 @@ resource "aws_subnet" "public_subnet_2" {
 }
 
 resource "aws_subnet" "public_subnet_3" {
-  vpc_id                  = aws_vpc.main_vpc.id
-  cidr_block              = var.public_subnet_cidr_3
-  availability_zone       = var.subnet_3_zone
+  vpc_id            = aws_vpc.main_vpc.id
+  cidr_block        = var.public_subnet_cidr_3
+  availability_zone = var.subnet_3_zone
 
   tags = {
-    Name = "Public Subnet 3"  
+    Name = "Public Subnet 3"
   }
 }
 
@@ -141,28 +141,28 @@ resource "aws_security_group" "application_security_webapp_kedar" {
   vpc_id      = aws_vpc.main_vpc.id
 
   ingress {
-    from_port   = 22      # Allow SSH
+    from_port   = 22 # Allow SSH
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    from_port   = 80      # Allow HTTP
+    from_port   = 80 # Allow HTTP
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    from_port   = 443     # Allow HTTPS
+    from_port   = 443 # Allow HTTPS
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    from_port   = 8080     # Replace with your application's port
+    from_port   = 8080 # Replace with your application's port
     to_port     = 8080
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
@@ -175,17 +175,17 @@ resource "aws_security_group" "application_security_webapp_kedar" {
 
 # Create an EC2 Instance
 resource "aws_instance" "kedar_web_app_instance" {
-  ami                    = var.Kedar_AMI_ID  # Your custom AMI ID
-  instance_type         = "t2.micro"       # Adjust as necessary
-  subnet_id             = aws_subnet.public_subnet_1.id  # Use a subnet from your created VPC
-  key_name              = "AWSDEVSSHKEY" 
-  vpc_security_group_ids = [aws_security_group.application_security_webapp_kedar.id]  # Attach the security group
+  ami                    = var.Kedar_AMI_ID              # Your custom AMI ID
+  instance_type          = "t2.micro"                    # Adjust as necessary
+  subnet_id              = aws_subnet.public_subnet_1.id # Use a subnet from your created VPC
+  key_name               = "AWSDEMOROLESSH"
+  vpc_security_group_ids = [aws_security_group.application_security_webapp_kedar.id] # Attach the security group
 
-  associate_public_ip_address = true  # Enable Public IP Assignment
+  associate_public_ip_address = true # Enable Public IP Assignment
 
   root_block_device {
-    volume_size = 25  # Root volume size
-    volume_type = "gp2"  # General Purpose SSD
+    volume_size           = 25    # Root volume size
+    volume_type           = "gp2" # General Purpose SSD
     delete_on_termination = true  # EBS volume should be deleted on instance termination
   }
 

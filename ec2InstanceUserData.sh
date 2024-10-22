@@ -1,7 +1,7 @@
 #!/bin/bash
 # Update package list and install required software
 sudo apt-get update -y
-sudo apt-get install -y postgresql-client
+#sudo apt-get install -y postgresql-client
 
 # Create the directory for the application if it doesn't exist
 sudo mkdir -p /opt/myapp/

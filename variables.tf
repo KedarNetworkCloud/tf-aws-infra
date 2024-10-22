@@ -74,3 +74,8 @@ variable "EC2_Instance_Type" {
   type        = string
   description = "Type of the AWS EC2 instance we are launching"
 }
+
+variable "RDS_INSTANCE_KEDAR_PASSWORD" {
+  type        = string
+  description = "RDS Instance Password"
+}

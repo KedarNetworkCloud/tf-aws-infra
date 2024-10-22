@@ -168,10 +168,19 @@ resource "aws_security_group" "application_security_webapp_kedar" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Outbound rules to allow all traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1" # "-1" allows all protocols
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   tags = {
     Name = "application security group"
   }
 }
+
 
 # Create an EC2 Instance
 resource "aws_instance" "kedar_web_app_instance" {
@@ -189,7 +198,94 @@ resource "aws_instance" "kedar_web_app_instance" {
     delete_on_termination = true  # EBS volume should be deleted on instance termination
   }
 
+  user_data = templatefile("./ec2InstanceUserData.sh", {
+    DB_HOST         = aws_db_instance.kedar_rds_instance.endpoint                       # Full endpoint with port
+    DB_HOST_NO_PORT = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", "") # Remove the port directly
+    DB_PASSWORD     = var.RDS_INSTANCE_KEDAR_PASSWORD
+  })
+
+  depends_on = [aws_db_instance.kedar_rds_instance]
+
   tags = {
     Name = "KedarWebAppInstance"
   }
 }
+
+
+
+# RDS Subnet Group for Private Subnet 1 only
+resource "aws_db_subnet_group" "rds_subnet_group" {
+  name       = "kedar-rds-subnet-group"
+  subnet_ids = [aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id] # Use only Private Subnet 1
+
+  tags = {
+    Name = "KedarRDSSubnetGroup"
+  }
+}
+
+# Security Group for RDS
+resource "aws_security_group" "rds_security_group" {
+  name        = "kedar-rds-sg"
+  description = "Allow access to RDS from web app"
+  vpc_id      = aws_vpc.main_vpc.id
+
+  ingress {
+    from_port       = 5432 # Replace with 3306 for MySQL
+    to_port         = 5432 # Replace with 3306 for MySQL
+    protocol        = "tcp"
+    security_groups = [aws_security_group.application_security_webapp_kedar.id] # Allow traffic from EC2 instances only
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "RDS Security Group"
+  }
+}
+
+# Create RDS parameter group for PostgreSQL 15
+resource "aws_db_parameter_group" "db_parameter_group" {
+  name   = "custom-postgres-parameter-group"
+  family = "postgres15" # Update this based on your PostgreSQL version
+
+  # Disable SSL enforcement
+  parameter {
+    name  = "rds.force_ssl"
+    value = "0"
+  }
+
+
+  tags = {
+    Name = "custom-postgres-parameter-group"
+  }
+}
+
+# Create RDS instance (PostgreSQL example)
+resource "aws_db_instance" "kedar_rds_instance" {
+  identifier             = "csye6225" # Unique identifier for the RDS instance
+  engine                 = "postgres" # Database engine
+  engine_version         = "15.8"
+  instance_class         = "db.t3.micro"                              # Instance type (adjust based on needs)
+  allocated_storage      = 20                                         # Amount of storage in GB
+  username               = "csye6225"                                 # Database username
+  password               = var.RDS_INSTANCE_KEDAR_PASSWORD            # Password for the database
+  db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name  # Subnet group for the RDS instance
+  vpc_security_group_ids = [aws_security_group.rds_security_group.id] # Security group attached to the instance
+  publicly_accessible    = false                                      # Set to true if you want the instance accessible from the internet
+  skip_final_snapshot    = true                                       # Skip final snapshot on deletion
+  db_name                = "csye6225"
+
+  # Use the correct attribute for parameter group
+  parameter_group_name = aws_db_parameter_group.db_parameter_group.name
+
+  tags = {
+    Name = "KedarRDSInstance" # Tag for identification
+  }
+}
+
+

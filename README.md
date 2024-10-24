@@ -28,3 +28,5 @@ We will be using the following terraform commands to set up our AWS Networking i
 5. Terraform destroy - It destroys all the infrastructure set up by the Terraform by removing everything written in the configuration files.
 
 6. Code review done
+
+Assignment 05 - Check Push

@@ -202,6 +202,9 @@ resource "aws_instance" "kedar_web_app_instance" {
     DB_HOST         = aws_db_instance.kedar_rds_instance.endpoint                       # Full endpoint with port
     DB_HOST_NO_PORT = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", "") # Remove the port directly
     DB_PASSWORD     = var.RDS_INSTANCE_KEDAR_PASSWORD
+    DB_NAME         = var.RDS_INSTANCE_DB_NAME
+    DB_USERNAME     = var.RDS_INSTANCE_USERNAME
+
   })
 
   depends_on = [aws_db_instance.kedar_rds_instance]
@@ -267,18 +270,18 @@ resource "aws_db_parameter_group" "db_parameter_group" {
 
 # Create RDS instance (PostgreSQL example)
 resource "aws_db_instance" "kedar_rds_instance" {
-  identifier             = "csye6225" # Unique identifier for the RDS instance
-  engine                 = "postgres" # Database engine
-  engine_version         = "15.8"
-  instance_class         = "db.t3.micro"                              # Instance type (adjust based on needs)
+  identifier             = var.RDS_INSTANCE_IDENTIFIER # Unique identifier for the RDS instance
+  engine                 = var.RDS_INSTANCE_ENGINE     # Database engine
+  engine_version         = var.RDS_INSTANCE_ENGINE_VERSION
+  instance_class         = var.RDS_INSTANCE_INSTANCE_CLASS            # Instance type (adjust based on needs)
   allocated_storage      = 20                                         # Amount of storage in GB
-  username               = "csye6225"                                 # Database username
+  username               = var.RDS_INSTANCE_USERNAME                  # Database username
   password               = var.RDS_INSTANCE_KEDAR_PASSWORD            # Password for the database
   db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name  # Subnet group for the RDS instance
   vpc_security_group_ids = [aws_security_group.rds_security_group.id] # Security group attached to the instance
   publicly_accessible    = false                                      # Set to true if you want the instance accessible from the internet
   skip_final_snapshot    = true                                       # Skip final snapshot on deletion
-  db_name                = "csye6225"
+  db_name                = var.RDS_INSTANCE_DB_NAME
 
   # Use the correct attribute for parameter group
   parameter_group_name = aws_db_parameter_group.db_parameter_group.name

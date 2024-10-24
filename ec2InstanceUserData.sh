@@ -9,8 +9,8 @@ sudo mkdir -p /opt/myapp/
 # Create .env file with appropriate environment variables
 cat <<EOL | sudo tee /opt/myapp/.env
 DB_HOST=${DB_HOST_NO_PORT}
-DB_NAME=csye6225
-DB_USERNAME=csye6225
+DB_NAME=${DB_NAME}
+DB_USERNAME=${DB_USERNAME}
 DB_PASSWORD=${DB_PASSWORD}
 DB_PORT=5432
 APP_PORT=8080

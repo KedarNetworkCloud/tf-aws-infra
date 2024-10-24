@@ -79,3 +79,33 @@ variable "RDS_INSTANCE_KEDAR_PASSWORD" {
   type        = string
   description = "RDS Instance Password"
 }
+
+variable "RDS_INSTANCE_USERNAME" {
+  type        = string
+  description = "RDS Instance USERNAME"
+}
+
+variable "RDS_INSTANCE_DB_NAME" {
+  type        = string
+  description = "RDS Instance DB NAME"
+}
+
+variable "RDS_INSTANCE_IDENTIFIER" {
+  type        = string
+  description = "RDS Instance IDENTIFIER"
+}
+
+variable "RDS_INSTANCE_ENGINE" {
+  type        = string
+  description = "RDS Instance ENGINE"
+}
+
+variable "RDS_INSTANCE_ENGINE_VERSION" {
+  type        = string
+  description = "RDS Instance ENGINE VERSION"
+}
+
+variable "RDS_INSTANCE_INSTANCE_CLASS" {
+  type        = string
+  description = "RDS Instance INSTANCE CLASS"
+}

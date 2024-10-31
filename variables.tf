@@ -109,3 +109,18 @@ variable "RDS_INSTANCE_INSTANCE_CLASS" {
   type        = string
   description = "RDS Instance INSTANCE CLASS"
 }
+
+variable "DEMO_SUBDOMAIN_NAME" {
+  type        = string
+  description = " DEMO SUBDOMAIN NAME"
+}
+
+variable "MAIN_DOMAIN_NAME" {
+  type        = string
+  description = "MAIN DOMAIN NAME"
+}
+
+variable "DEV_SUBDOMAIN_NAME" {
+  type        = string
+  description = "DEV SUBDOMAIN NAME"
+}

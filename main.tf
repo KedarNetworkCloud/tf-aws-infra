@@ -182,29 +182,119 @@ resource "aws_security_group" "application_security_webapp_kedar" {
 }
 
 
-# Create an EC2 Instance
-resource "aws_instance" "kedar_web_app_instance" {
-  ami                    = var.Kedar_AMI_ID              # Your custom AMI ID
-  instance_type          = "t2.micro"                    # Adjust as necessary
-  subnet_id              = aws_subnet.public_subnet_1.id # Use a subnet from your created VPC
-  key_name               = "AWSDEMOROLESSH"
-  vpc_security_group_ids = [aws_security_group.application_security_webapp_kedar.id] # Attach the security group
+resource "aws_s3_bucket" "demo_s3_bucket" {
+  bucket = "demo-s3-bucket-${uuid()}" # Use UUID function for uniqueness
 
-  associate_public_ip_address = true # Enable Public IP Assignment
+  tags = {
+    Name = "DemoS3Bucket"
+  }
+}
+
+resource "aws_iam_role" "ec2_s3_access_role" {
+  name = "EC2S3AccessRole"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_policy" "s3_access_policy" {
+  name        = "S3AccessPolicy"
+  description = "Allows access to the demo S3 bucket"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket",
+          "s3:DeleteObject", # Allows deletion of objects
+          "s3:DeleteBucket"  # Allows deletion of the bucket itself
+        ]
+        Resource = [
+          aws_s3_bucket.demo_s3_bucket.arn,
+          "${aws_s3_bucket.demo_s3_bucket.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Policy for CloudWatch logging and metrics
+resource "aws_iam_policy" "cloudwatch_policy" {
+  name        = "CloudWatchPolicy"
+  description = "Allows EC2 instances to write logs and metrics to CloudWatch"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "cloudwatch:PutMetricData"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "attach_s3_policy" {
+  policy_arn = aws_iam_policy.s3_access_policy.arn
+  role       = aws_iam_role.ec2_s3_access_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "attach_cloudwatch_policy" {
+  policy_arn = aws_iam_policy.cloudwatch_policy.arn
+  role       = aws_iam_role.ec2_s3_access_role.name
+}
+
+# Create an EC2 Instance
+resource "aws_iam_instance_profile" "ec2_s3_instance_profile" {
+  name = "EC2S3InstanceProfile"
+  role = aws_iam_role.ec2_s3_access_role.name
+}
+
+resource "aws_instance" "kedar_web_app_instance" {
+  ami                    = var.Kedar_AMI_ID
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.public_subnet_1.id
+  key_name               = "AWSDEMOROLESSH"
+  vpc_security_group_ids = [aws_security_group.application_security_webapp_kedar.id]
+
+  associate_public_ip_address = true
+
+  iam_instance_profile = aws_iam_instance_profile.ec2_s3_instance_profile.name # Attach the IAM role
 
   root_block_device {
-    volume_size           = 25    # Root volume size
-    volume_type           = "gp2" # General Purpose SSD
-    delete_on_termination = true  # EBS volume should be deleted on instance termination
+    volume_size           = 25
+    volume_type           = "gp2"
+    delete_on_termination = true
   }
 
   user_data = templatefile("./ec2InstanceUserData.sh", {
-    DB_HOST         = aws_db_instance.kedar_rds_instance.endpoint                       # Full endpoint with port
-    DB_HOST_NO_PORT = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", "") # Remove the port directly
+    DB_HOST         = aws_db_instance.kedar_rds_instance.endpoint
+    DB_HOST_NO_PORT = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", "")
     DB_PASSWORD     = var.RDS_INSTANCE_KEDAR_PASSWORD
     DB_NAME         = var.RDS_INSTANCE_DB_NAME
     DB_USERNAME     = var.RDS_INSTANCE_USERNAME
-
+    S3_BUCKET_NAME  = aws_s3_bucket.demo_s3_bucket.bucket
+    aws_region      = var.aws_region
   })
 
   depends_on = [aws_db_instance.kedar_rds_instance]
@@ -213,6 +303,7 @@ resource "aws_instance" "kedar_web_app_instance" {
     Name = "KedarWebAppInstance"
   }
 }
+
 
 
 
@@ -266,6 +357,19 @@ resource "aws_db_parameter_group" "db_parameter_group" {
   tags = {
     Name = "custom-postgres-parameter-group"
   }
+}
+
+# Reference the existing Route 53 hosted zone in the main AWS account
+data "aws_route53_zone" "demo" {
+  name = "demo.csye6225kedar.xyz"
+}
+
+resource "aws_route53_record" "demo_a_record" {
+  zone_id = data.aws_route53_zone.demo.zone_id
+  name    = "${var.DEMO_SUBDOMAIN_NAME}.${var.MAIN_DOMAIN_NAME}"
+  type    = "A"
+  ttl     = 60
+  records = [aws_instance.kedar_web_app_instance.public_ip]
 }
 
 # Create RDS instance (PostgreSQL example)

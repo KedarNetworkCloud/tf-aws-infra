@@ -264,6 +264,7 @@ resource "aws_iam_role_policy_attachment" "attach_cloudwatch_policy" {
   role       = aws_iam_role.ec2_s3_access_role.name
 }
 
+
 # Create an EC2 Instance
 resource "aws_iam_instance_profile" "ec2_s3_instance_profile" {
   name = "EC2S3InstanceProfile"

@@ -183,7 +183,7 @@ resource "aws_security_group" "application_security_webapp_kedar" {
 
 
 resource "aws_s3_bucket" "demo_s3_bucket" {
-  bucket = "demo-s3-bucket-${uuid()}"  # Use UUID function for uniqueness
+  bucket = "demo-s3-bucket-${uuid()}" # Use UUID function for uniqueness
 
   tags = {
     Name = "DemoS3Bucket"
@@ -220,8 +220,8 @@ resource "aws_iam_policy" "s3_access_policy" {
           "s3:GetObject",
           "s3:PutObject",
           "s3:ListBucket",
-          "s3:DeleteObject",     # Allows deletion of objects
-          "s3:DeleteBucket"      # Allows deletion of the bucket itself
+          "s3:DeleteObject", # Allows deletion of objects
+          "s3:DeleteBucket"  # Allows deletion of the bucket itself
         ]
         Resource = [
           aws_s3_bucket.demo_s3_bucket.arn,
@@ -279,7 +279,7 @@ resource "aws_instance" "kedar_web_app_instance" {
 
   associate_public_ip_address = true
 
-  iam_instance_profile = aws_iam_instance_profile.ec2_s3_instance_profile.name  # Attach the IAM role
+  iam_instance_profile = aws_iam_instance_profile.ec2_s3_instance_profile.name # Attach the IAM role
 
   root_block_device {
     volume_size           = 25
@@ -294,7 +294,7 @@ resource "aws_instance" "kedar_web_app_instance" {
     DB_NAME         = var.RDS_INSTANCE_DB_NAME
     DB_USERNAME     = var.RDS_INSTANCE_USERNAME
     S3_BUCKET_NAME  = aws_s3_bucket.demo_s3_bucket.bucket
-    aws_region = var.aws_region
+    aws_region      = var.aws_region
   })
 
   depends_on = [aws_db_instance.kedar_rds_instance]
@@ -366,10 +366,10 @@ data "aws_route53_zone" "demo" {
 
 resource "aws_route53_record" "demo_a_record" {
   zone_id = data.aws_route53_zone.demo.zone_id
-  name     = "${var.DEMO_SUBDOMAIN_NAME}.${var.MAIN_DOMAIN_NAME}"
-  type     = "A"
-  ttl      = 60
-  records  = [aws_instance.kedar_web_app_instance.public_ip]
+  name    = "${var.DEMO_SUBDOMAIN_NAME}.${var.MAIN_DOMAIN_NAME}"
+  type    = "A"
+  ttl     = 60
+  records = [aws_instance.kedar_web_app_instance.public_ip]
 }
 
 # Create RDS instance (PostgreSQL example)

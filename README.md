@@ -30,3 +30,5 @@ We will be using the following terraform commands to set up our AWS Networking i
 6. Code review done
 
 Assignment 05 - Check Push
+
+Assignment 06 - Code push

@@ -19,7 +19,7 @@ We will be using the following terraform commands to set up our AWS Networking i
 
 1. Terraform init - Terraform scans the entire code to figure out which providers are being used, AWS for this assignment and then this command initializes it by downloading the respective provider plugins.
 
-2. Terraform validate - This command is used to validate our terraform code making sure all configs are done properly and the terrafomr code is syntactically accurate.
+2. Terraform validate - This command is used to validate our terraform code making sure all configs are done properly and the terraform code is syntactically accurate.
 
 3. Terraform plan - It shows a detailed preview of what Terraform will do when you apply a configuration, without actually making any changes.
 

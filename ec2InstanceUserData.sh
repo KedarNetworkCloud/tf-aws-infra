@@ -49,6 +49,3 @@ sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-c
 
 # Restart the CloudWatch Agent to apply the new configuration
 sudo systemctl restart amazon-cloudwatch-agent
-
-
-

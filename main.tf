@@ -134,45 +134,22 @@ resource "aws_route_table_association" "private_subnet_association_3" {
   route_table_id = aws_route_table.privateRouteTable.id
 }
 
-// Application Security Group
+# Get the public IP address dynamically
+data "http" "my_ip" {
+  url = "http://checkip.amazonaws.com/"
+}
+
+# Application Security Group
 resource "aws_security_group" "application_security_webapp_kedar" {
   name        = "application_security_group"
   description = "Security group for web application instances"
   vpc_id      = aws_vpc.main_vpc.id
 
-  ingress {
-    from_port   = 22 # Allow SSH
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 80 # Allow HTTP
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443 # Allow HTTPS
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 8080 # Replace with your application's port
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Outbound rules to allow all traffic
+  # Allow all outgoing traffic
   egress {
     from_port   = 0
     to_port     = 0
-    protocol    = "-1" # "-1" allows all protocols
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -180,6 +157,27 @@ resource "aws_security_group" "application_security_webapp_kedar" {
     Name = "application security group"
   }
 }
+
+# Security Group Rule for Load Balancer
+resource "aws_security_group_rule" "allow_lb_to_webapp" {
+  type                     = "ingress"
+  from_port                = 8080
+  to_port                  = 8080
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.application_security_webapp_kedar.id
+  source_security_group_id = aws_security_group.load_balancer_sg.id
+}
+
+# Security Group Rule for SSH access (if needed for debugging)
+resource "aws_security_group_rule" "allow_ssh_access" {
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  security_group_id = aws_security_group.application_security_webapp_kedar.id
+  cidr_blocks       = ["0.0.0.0/0"] # Use a more restricted CIDR block in production
+}
+
 
 
 resource "aws_s3_bucket" "demo_s3_bucket" {
@@ -271,24 +269,41 @@ resource "aws_iam_instance_profile" "ec2_s3_instance_profile" {
   role = aws_iam_role.ec2_s3_access_role.name
 }
 
-resource "aws_instance" "kedar_web_app_instance" {
-  ami                    = var.Kedar_AMI_ID
-  instance_type          = "t2.micro"
-  subnet_id              = aws_subnet.public_subnet_1.id
-  key_name               = "AWSDEMOROLESSH"
-  vpc_security_group_ids = [aws_security_group.application_security_webapp_kedar.id]
 
-  associate_public_ip_address = true
+# Launch Template for EC2 instances
+resource "aws_launch_template" "kedar_web_app_template" {
+  name        = "kedar-web-app-launch-template"
+  description = "Launch template for Kedar's web application"
 
-  iam_instance_profile = aws_iam_instance_profile.ec2_s3_instance_profile.name # Attach the IAM role
+  # Basic instance settings
+  image_id      = var.Kedar_AMI_ID
+  instance_type = "t2.micro"
+  key_name      = "AWSDEMOROLESSH"
 
-  root_block_device {
-    volume_size           = 25
-    volume_type           = "gp2"
-    delete_on_termination = true
+  # Network settings
+  network_interfaces {
+    associate_public_ip_address = true
+    subnet_id                   = aws_subnet.public_subnet_1.id
+    security_groups             = [aws_security_group.application_security_webapp_kedar.id]
   }
 
-  user_data = templatefile("./ec2InstanceUserData.sh", {
+  # IAM instance profile configuration
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_s3_instance_profile.name
+  }
+
+  # Root volume configuration
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size           = 25
+      volume_type           = "gp2"
+      delete_on_termination = true
+    }
+  }
+
+  # User data
+  user_data = base64encode(templatefile("./ec2InstanceUserData.sh", {
     DB_HOST         = aws_db_instance.kedar_rds_instance.endpoint
     DB_HOST_NO_PORT = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", "")
     DB_PASSWORD     = var.RDS_INSTANCE_KEDAR_PASSWORD
@@ -296,15 +311,19 @@ resource "aws_instance" "kedar_web_app_instance" {
     DB_USERNAME     = var.RDS_INSTANCE_USERNAME
     S3_BUCKET_NAME  = aws_s3_bucket.demo_s3_bucket.bucket
     aws_region      = var.aws_region
-  })
+  }))
 
-  depends_on = [aws_db_instance.kedar_rds_instance]
-
-  tags = {
-    Name = "KedarWebAppInstance"
+  # Tags
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "KedarWebAppInstance"
+    }
   }
-}
 
+  # Optional dependency
+  depends_on = [aws_db_instance.kedar_rds_instance]
+}
 
 
 
@@ -365,12 +384,16 @@ data "aws_route53_zone" "demo" {
   name = "demo.csye6225kedar.xyz"
 }
 
-resource "aws_route53_record" "demo_a_record" {
+resource "aws_route53_record" "dns_record" {
   zone_id = data.aws_route53_zone.demo.zone_id
   name    = "${var.DEMO_SUBDOMAIN_NAME}.${var.MAIN_DOMAIN_NAME}"
   type    = "A"
-  ttl     = 60
-  records = [aws_instance.kedar_web_app_instance.public_ip]
+
+  alias {
+    name                   = aws_lb.app_load_balancer.dns_name
+    zone_id                = aws_lb.app_load_balancer.zone_id
+    evaluate_target_health = true
+  }
 }
 
 # Create RDS instance (PostgreSQL example)
@@ -395,5 +418,159 @@ resource "aws_db_instance" "kedar_rds_instance" {
     Name = "KedarRDSInstance" # Tag for identification
   }
 }
+
+
+# Load Balancer Security Group
+resource "aws_security_group" "load_balancer_sg" {
+  name        = "load_balancer_security_group"
+  description = "Security group for the load balancer"
+  vpc_id      = aws_vpc.main_vpc.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+# Step 5: Application Load Balancer
+
+resource "aws_lb" "app_load_balancer" {
+  name               = "app-load-balancer"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.load_balancer_sg.id]
+  subnets            = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id]
+
+  enable_deletion_protection = false
+}
+
+# Listener for Load Balancer
+resource "aws_lb_listener" "http_listener" {
+  load_balancer_arn = aws_lb.app_load_balancer.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_target_group.arn
+  }
+}
+
+# Target Group for Load Balancer
+resource "aws_lb_target_group" "app_target_group" {
+  name     = "app-target-group"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main_vpc.id
+
+  health_check {
+    path                = "/healthz"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+}
+
+resource "aws_autoscaling_group" "kedar_web_app_asg" {
+  launch_template {
+    id      = aws_launch_template.kedar_web_app_template.id
+    version = "$Latest"
+  }
+
+  min_size         = 3
+  max_size         = 5
+  desired_capacity = 3
+  vpc_zone_identifier = [
+    aws_subnet.public_subnet_1.id
+  ]
+
+  # Link the Auto Scaling Group to the Target Group
+  target_group_arns = [aws_lb_target_group.app_target_group.arn]
+
+  # Add tags to the Auto Scaling Group
+  tag {
+    key                 = "AutoScalingGroup"
+    value               = "csye6225_asg"
+    propagate_at_launch = true
+  }
+
+  # Specify other necessary settings (like health check type, etc.)
+  health_check_type         = "EC2"
+  health_check_grace_period = 300
+}
+
+
+# Auto Scaling Policies
+resource "aws_autoscaling_policy" "scale_up" {
+  name                   = "ScaleUpPolicy"
+  scaling_adjustment     = 1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 60
+  autoscaling_group_name = aws_autoscaling_group.kedar_web_app_asg.name
+}
+
+resource "aws_autoscaling_policy" "scale_down" {
+  name                   = "ScaleDownPolicy"
+  scaling_adjustment     = -1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 60
+  autoscaling_group_name = aws_autoscaling_group.kedar_web_app_asg.name
+}
+
+# CloudWatch Metric Alarms for Scaling Policies
+resource "aws_cloudwatch_metric_alarm" "high_cpu" {
+  alarm_name                = "High CPU Alarm"
+  comparison_operator       = "GreaterThanThreshold"
+  evaluation_periods        = "2"
+  metric_name               = "CPUUtilization"
+  namespace                 = "AWS/EC2"
+  period                    = "60"
+  statistic                 = "Average"
+  threshold                 = 12.0 # CPU utilization threshold for scaling out
+  alarm_description         = "Alarm when CPU exceeds 5%"
+  insufficient_data_actions = []
+  alarm_actions             = [aws_autoscaling_policy.scale_up.arn]
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.kedar_web_app_asg.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "low_cpu" {
+  alarm_name                = "Low CPU Alarm"
+  comparison_operator       = "LessThanThreshold"
+  evaluation_periods        = "2"
+  metric_name               = "CPUUtilization"
+  namespace                 = "AWS/EC2"
+  period                    = "60"
+  statistic                 = "Average"
+  threshold                 = 8.0 # CPU utilization threshold for scaling in
+  alarm_description         = "Alarm when CPU goes below 3%"
+  insufficient_data_actions = []
+  alarm_actions             = [aws_autoscaling_policy.scale_down.arn]
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.kedar_web_app_asg.name
+  }
+}
+
 
 

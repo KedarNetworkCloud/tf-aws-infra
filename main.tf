@@ -175,7 +175,8 @@ resource "aws_security_group_rule" "allow_ssh_access" {
   to_port           = 22
   protocol          = "tcp"
   security_group_id = aws_security_group.application_security_webapp_kedar.id
-  cidr_blocks       = ["0.0.0.0/0"] # Use a more restricted CIDR block in production
+  cidr_blocks       = ["${chomp(data.http.my_ip.response_body)}/32"]
+
 }
 
 
@@ -185,6 +186,20 @@ resource "aws_s3_bucket" "demo_s3_bucket" {
 
   tags = {
     Name = "DemoS3Bucket"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "lifecycle_rule" {
+  bucket = aws_s3_bucket.demo_s3_bucket.id
+
+  rule {
+    id     = "TransitionToIA"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
   }
 }
 

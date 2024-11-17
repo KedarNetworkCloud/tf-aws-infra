@@ -5,7 +5,7 @@ sudo apt-get update -y
 # Create the directory for the application if it doesn't exist
 sudo mkdir -p /opt/myapp/
 
-# Create .env file with appropriate environment variables
+# Create .env file with appropriate environment variables, including SNS_TOPIC_ARN
 cat <<EOL | sudo tee /opt/myapp/.env
 DB_HOST=${DB_HOST_NO_PORT}
 DB_NAME=${DB_NAME}
@@ -15,6 +15,7 @@ DB_PORT=5432
 APP_PORT=8080
 S3_BUCKET_NAME=${S3_BUCKET_NAME}
 AWS_REGION=${aws_region}
+SNS_TOPIC_ARN=${SNS_TOPIC_ARN}
 EOL
 
 # Set ownership and permissions for the .env file

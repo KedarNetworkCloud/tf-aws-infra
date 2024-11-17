@@ -135,7 +135,7 @@ resource "aws_route_table_association" "public_subnet_association_3" {
 resource "aws_route_table" "privateRouteTable" {
   vpc_id = aws_vpc.main_vpc.id
 
-    route {
+  route {
     cidr_block     = "0.0.0.0/0"
     nat_gateway_id = aws_nat_gateway.nat_gateway.id
   }
@@ -410,7 +410,7 @@ resource "aws_security_group" "rds_security_group" {
     security_groups = [aws_security_group.application_security_webapp_kedar.id] # Allow traffic from EC2 instances only
   }
 
-    ingress {
+  ingress {
     from_port       = 5432 # Replace with 3306 for MySQL
     to_port         = 5432 # Replace with 3306 for MySQL
     protocol        = "tcp"
@@ -650,13 +650,13 @@ resource "aws_lambda_layer_version" "send_email_dependencies" {
 }
 
 resource "aws_lambda_function" "send_email" {
-  s3_bucket      = aws_s3_bucket.lambda_bucket.bucket
-  s3_key         = aws_s3_object.lambda_function_zip.key
-  function_name  = "SendEmailFunction"
-  handler        = "sendEmail.handler"
-  runtime        = "nodejs18.x"
-  timeout        = 120
-  role           = aws_iam_role.lambda_exec.arn  # Specify the role here
+  s3_bucket     = aws_s3_bucket.lambda_bucket.bucket
+  s3_key        = aws_s3_object.lambda_function_zip.key
+  function_name = "SendEmailFunction"
+  handler       = "sendEmail.handler"
+  runtime       = "nodejs18.x"
+  timeout       = 120
+  role          = aws_iam_role.lambda_exec.arn # Specify the role here
 
   layers = [aws_lambda_layer_version.send_email_dependencies.arn]
 
@@ -674,8 +674,8 @@ resource "aws_lambda_function" "send_email" {
 
   # VPC Configuration
   vpc_config {
-    subnet_ids         = [aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id]  # Private subnets where RDS resides
-    security_group_ids = [aws_security_group.lambda_sg.id]  # Security group attached to Lambda
+    subnet_ids         = [aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id] # Private subnets where RDS resides
+    security_group_ids = [aws_security_group.lambda_sg.id]                                # Security group attached to Lambda
   }
 }
 
@@ -706,7 +706,7 @@ resource "aws_security_group" "lambda_sg" {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = ["10.0.2.0/24"]  # RDS private subnet CIDR
+    cidr_blocks = ["10.0.2.0/24"] # RDS private subnet CIDR
   }
 
   tags = {
@@ -789,12 +789,12 @@ resource "aws_lambda_permission" "allow_sns_to_invoke_lambda" {
 resource "aws_iam_policy" "lambda_vpc_policy" {
   name        = "LambdaVPCPolicy"
   description = "Policy that allows Lambda functions to create network interfaces in VPC"
-  policy      = jsonencode({
+  policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "ec2:CreateNetworkInterface",
           "ec2:DescribeNetworkInterfaces",
           "ec2:DeleteNetworkInterface"
@@ -812,7 +812,7 @@ resource "aws_iam_role_policy_attachment" "lambda_exec_vpc_policy_attachment" {
 
 
 resource "aws_s3_bucket" "lambda_bucket" {
-    bucket = "demo-s3-bucket-${uuid()}"  # The S3 bucket name
+  bucket = "demo-s3-bucket-${uuid()}" # The S3 bucket name
 
   tags = {
     Name        = "Lambda Bucket"
@@ -821,15 +821,15 @@ resource "aws_s3_bucket" "lambda_bucket" {
 }
 
 resource "aws_s3_object" "lambda_layer_zip" {
-  bucket = aws_s3_bucket.lambda_bucket.bucket  # References the S3 bucket name defined above
-  key    = "lambda-layer.zip"                  # File name directly in S3 root
-  source = "${path.module}/lambda-layer.zip"   # Path to ZIP file in Terraform root folder
-  etag   = filemd5("${path.module}/lambda-layer.zip")  # Ensures updates only if the file changes
+  bucket = aws_s3_bucket.lambda_bucket.bucket         # References the S3 bucket name defined above
+  key    = "lambda-layer.zip"                         # File name directly in S3 root
+  source = "${path.module}/lambda-layer.zip"          # Path to ZIP file in Terraform root folder
+  etag   = filemd5("${path.module}/lambda-layer.zip") # Ensures updates only if the file changes
 }
 
 resource "aws_s3_object" "lambda_function_zip" {
   bucket = aws_s3_bucket.lambda_bucket.bucket
-  key    = "serverless.zip"                    # File name directly in S3 root
+  key    = "serverless.zip" # File name directly in S3 root
   source = "${path.module}/serverless.zip"
   etag   = filemd5("${path.module}/serverless.zip")
 }

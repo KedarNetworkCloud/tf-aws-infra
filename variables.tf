@@ -124,3 +124,13 @@ variable "DEV_SUBDOMAIN_NAME" {
   type        = string
   description = "DEV SUBDOMAIN NAME"
 }
+
+variable "SENDGRID_API_KEY" {
+  description = "SendGrid API key for email sending"
+  type        = string
+}
+
+variable "DOMAIN" {
+  description = "Domain used as 'from' email address"
+  type        = string
+}

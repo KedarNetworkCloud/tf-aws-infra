@@ -96,6 +96,27 @@ resource "aws_route_table" "publicRouteTable" {
   }
 }
 
+# Elastic IP for NAT Gateway
+resource "aws_eip" "nat_eip" {
+  depends_on = [aws_internet_gateway.internetGateway]
+
+  tags = {
+    Name = "NATGatewayEIP"
+  }
+}
+
+
+# NAT Gateway in Public Subnet
+resource "aws_nat_gateway" "nat_gateway" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.public_subnet_1.id
+
+  tags = {
+    Name = "NATGateway"
+  }
+}
+
+
 resource "aws_route_table_association" "public_subnet_association_1" {
   subnet_id      = aws_subnet.public_subnet_1.id
   route_table_id = aws_route_table.publicRouteTable.id
@@ -113,6 +134,11 @@ resource "aws_route_table_association" "public_subnet_association_3" {
 
 resource "aws_route_table" "privateRouteTable" {
   vpc_id = aws_vpc.main_vpc.id
+
+    route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat_gateway.id
+  }
 
   tags = {
     Name = "Private Route Table"
@@ -267,6 +293,19 @@ resource "aws_iam_policy" "cloudwatch_policy" {
   })
 }
 
+resource "aws_iam_policy" "ec2_sns_publish_policy" {
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Effect" : "Allow",
+        "Action" : "sns:Publish",
+        "Resource" : aws_sns_topic.user_creation_topic.arn
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "attach_s3_policy" {
   policy_arn = aws_iam_policy.s3_access_policy.arn
   role       = aws_iam_role.ec2_s3_access_role.name
@@ -274,6 +313,11 @@ resource "aws_iam_role_policy_attachment" "attach_s3_policy" {
 
 resource "aws_iam_role_policy_attachment" "attach_cloudwatch_policy" {
   policy_arn = aws_iam_policy.cloudwatch_policy.arn
+  role       = aws_iam_role.ec2_s3_access_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "attach_sns_policy" {
+  policy_arn = aws_iam_policy.ec2_sns_publish_policy.arn
   role       = aws_iam_role.ec2_s3_access_role.name
 }
 
@@ -326,6 +370,7 @@ resource "aws_launch_template" "kedar_web_app_template" {
     DB_USERNAME     = var.RDS_INSTANCE_USERNAME
     S3_BUCKET_NAME  = aws_s3_bucket.demo_s3_bucket.bucket
     aws_region      = var.aws_region
+    SNS_TOPIC_ARN   = aws_sns_topic.user_creation_topic.arn
   }))
 
   # Tags
@@ -363,6 +408,13 @@ resource "aws_security_group" "rds_security_group" {
     to_port         = 5432 # Replace with 3306 for MySQL
     protocol        = "tcp"
     security_groups = [aws_security_group.application_security_webapp_kedar.id] # Allow traffic from EC2 instances only
+  }
+
+    ingress {
+    from_port       = 5432 # Replace with 3306 for MySQL
+    to_port         = 5432 # Replace with 3306 for MySQL
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lambda_sg.id]
   }
 
   egress {
@@ -530,6 +582,9 @@ resource "aws_autoscaling_group" "kedar_web_app_asg" {
   # Specify other necessary settings (like health check type, etc.)
   health_check_type         = "EC2"
   health_check_grace_period = 300
+
+  # Specify a name for the ASG
+  name = "kedar-web-app-asg"
 }
 
 
@@ -587,5 +642,196 @@ resource "aws_cloudwatch_metric_alarm" "low_cpu" {
   }
 }
 
+resource "aws_lambda_layer_version" "send_email_dependencies" {
+  layer_name          = "send-email-dependencies"
+  compatible_runtimes = ["nodejs18.x"]
+  s3_bucket           = aws_s3_bucket.lambda_bucket.bucket
+  s3_key              = aws_s3_object.lambda_layer_zip.key
+}
+
+resource "aws_lambda_function" "send_email" {
+  s3_bucket      = aws_s3_bucket.lambda_bucket.bucket
+  s3_key         = aws_s3_object.lambda_function_zip.key
+  function_name  = "SendEmailFunction"
+  handler        = "sendEmail.handler"
+  runtime        = "nodejs18.x"
+  timeout        = 120
+  role           = aws_iam_role.lambda_exec.arn  # Specify the role here
+
+  layers = [aws_lambda_layer_version.send_email_dependencies.arn]
+
+  environment {
+    variables = {
+      SENDGRID_API_KEY = var.SENDGRID_API_KEY
+      DOMAIN           = var.DOMAIN
+      DB_HOST          = aws_db_instance.kedar_rds_instance.endpoint
+      DB_HOST_NO_PORT  = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", "")
+      DB_PASSWORD      = var.RDS_INSTANCE_KEDAR_PASSWORD
+      DB_NAME          = var.RDS_INSTANCE_DB_NAME
+      DB_USERNAME      = var.RDS_INSTANCE_USERNAME
+    }
+  }
+
+  # VPC Configuration
+  vpc_config {
+    subnet_ids         = [aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id]  # Private subnets where RDS resides
+    security_group_ids = [aws_security_group.lambda_sg.id]  # Security group attached to Lambda
+  }
+}
+
+
+
+# Lambda Security Group
+resource "aws_security_group" "lambda_sg" {
+  vpc_id = aws_vpc.main_vpc.id
+
+  # Outbound rule to allow HTTPS traffic on port 443 to SendGrid API or any external service
+  egress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+  }
+
+  # Egress rule to allow outbound traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Inbound rule for specific access (e.g., RDS security group access)
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.2.0/24"]  # RDS private subnet CIDR
+  }
+
+  tags = {
+    Name = "LambdaSecurityGroup"
+  }
+}
+
+
+
+
+resource "aws_iam_role" "lambda_exec" {
+  name = "lambda-execution-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "sts:AssumeRole"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+
+resource "aws_iam_policy" "rds_access_policy" {
+  name        = "rds-access-policy"
+  description = "Policy to allow Lambda to describe and connect to RDS"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "rds:DescribeDBInstances"
+        Resource = "arn:aws:rds:us-east-1:123456789012:db:kedar_rds_instance"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "rds-db:connect"
+        Resource = "arn:aws:rds-db:us-east-1:123456789012:dbuser:kedar_rds_instance/kedaruser"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_rds_policy" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.rds_access_policy.arn
+}
+
+
+resource "aws_iam_role_policy_attachment" "lambda_exec_cloudwatch" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_sns_topic" "user_creation_topic" {
+  name = "user-creation-topic"
+}
+
+resource "aws_sns_topic_subscription" "sns_lambda_subscription" {
+  topic_arn = aws_sns_topic.user_creation_topic.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.send_email.arn
+}
+
+
+resource "aws_lambda_permission" "allow_sns_to_invoke_lambda" {
+  statement_id  = "AllowExecutionFromSNS"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.send_email.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.user_creation_topic.arn
+}
+
+resource "aws_iam_policy" "lambda_vpc_policy" {
+  name        = "LambdaVPCPolicy"
+  description = "Policy that allows Lambda functions to create network interfaces in VPC"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = [
+          "ec2:CreateNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DeleteNetworkInterface"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_exec_vpc_policy_attachment" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.lambda_vpc_policy.arn
+}
+
+
+resource "aws_s3_bucket" "lambda_bucket" {
+    bucket = "demo-s3-bucket-${uuid()}"  # The S3 bucket name
+
+  tags = {
+    Name        = "Lambda Bucket"
+    Environment = "Production"
+  }
+}
+
+resource "aws_s3_object" "lambda_layer_zip" {
+  bucket = aws_s3_bucket.lambda_bucket.bucket  # References the S3 bucket name defined above
+  key    = "lambda-layer.zip"                  # File name directly in S3 root
+  source = "${path.module}/lambda-layer.zip"   # Path to ZIP file in Terraform root folder
+  etag   = filemd5("${path.module}/lambda-layer.zip")  # Ensures updates only if the file changes
+}
+
+resource "aws_s3_object" "lambda_function_zip" {
+  bucket = aws_s3_bucket.lambda_bucket.bucket
+  key    = "serverless.zip"                    # File name directly in S3 root
+  source = "${path.module}/serverless.zip"
+  etag   = filemd5("${path.module}/serverless.zip")
+}
 
 

@@ -130,7 +130,13 @@ variable "SENDGRID_API_KEY" {
   type        = string
 }
 
-variable "DOMAIN" {
+variable "DEMO_DOMAIN" {
+  description = "Domain used as 'from' email address"
+  type        = string
+}
+
+
+variable "DEV_DOMAIN" {
   description = "Domain used as 'from' email address"
   type        = string
 }

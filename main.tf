@@ -663,7 +663,7 @@ resource "aws_lambda_function" "send_email" {
   environment {
     variables = {
       SENDGRID_API_KEY = var.SENDGRID_API_KEY
-      DOMAIN           = var.DEV_DOMAIN
+      DOMAIN           = var.DEMO_DOMAIN
       DB_HOST          = aws_db_instance.kedar_rds_instance.endpoint
       DB_HOST_NO_PORT  = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", "")
       DB_PASSWORD      = var.RDS_INSTANCE_KEDAR_PASSWORD

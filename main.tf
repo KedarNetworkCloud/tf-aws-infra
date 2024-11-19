@@ -821,9 +821,9 @@ resource "aws_s3_bucket" "lambda_bucket" {
 }
 
 resource "aws_s3_object" "lambda_layer_zip" {
-  bucket = aws_s3_bucket.lambda_bucket.bucket         # References the S3 bucket name defined above
-  key    = "lambda-layer.zip"                         # File name directly in S3 root
-  source = "${path.module}/lambda-layer.zip"          # Path to ZIP file in Terraform root folder
+  bucket = aws_s3_bucket.lambda_bucket.bucket # References the S3 bucket name defined above
+  key    = "lambda-layer.zip"                 # File name directly in S3 root
+  source = "${path.module}/lambda-layer.zip"  # Path to ZIP file in Terraform root folder
   //etag   = filemd5("${path.module}/lambda-layer.zip") # Ensures updates only if the file changes
 }
 

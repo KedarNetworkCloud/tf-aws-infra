@@ -140,3 +140,8 @@ variable "DEV_DOMAIN" {
   description = "Domain used as 'from' email address"
   type        = string
 }
+
+variable "SSL_CERTIFICATE_ARN" {
+  description = "SSL Certificate ARN that we imported to AWS"
+  type        = string
+}

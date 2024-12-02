@@ -32,3 +32,12 @@ We will be using the following terraform commands to set up our AWS Networking i
 Assignment 05 - Check Push
 
 Assignment 06 - Code push
+
+Assignment 09
+For uploading out SSL certificates from Namecheap to AWS we used the following commands once through AWS CLI
+aws acm import-certificate \
+    --certificate fileb://C:/Users/kedar/Downloads/demo_csye6225kedar.xyz/demo_csye6225kedar_xyz.crt \
+    --private-key fileb://C:/Users/kedar/private.key \
+    --certificate-chain fileb://C:/Users/kedar/Downloads/demo_csye6225kedar.xyz/demo_csye6225kedar_xyz.ca-bundle \
+    --region us-east-1 \
+    --profile Demo

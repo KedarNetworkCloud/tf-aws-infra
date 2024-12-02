@@ -856,16 +856,16 @@ resource "aws_s3_bucket" "lambda_bucket" {
 }
 
 resource "aws_s3_object" "lambda_layer_zip" {
-  bucket = aws_s3_bucket.lambda_bucket.bucket                                         # References the S3 bucket name defined above
-  key    = "lambda-layer.zip"                                                         # File name directly in S3 root
-  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip"          # Full path to the ZIP file
+  bucket = aws_s3_bucket.lambda_bucket.bucket                                # References the S3 bucket name defined above
+  key    = "lambda-layer.zip"                                                # File name directly in S3 root
+  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip" # Full path to the ZIP file
   //etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip") # Ensures updates only if the file changes
 }
 
 resource "aws_s3_object" "lambda_function_zip" {
-  bucket = aws_s3_bucket.lambda_bucket.bucket                                       # References the S3 bucket name defined above
-  key    = "serverless.zip"                                                         # File name directly in S3 root
-  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip"          # Full path to the ZIP file
+  bucket = aws_s3_bucket.lambda_bucket.bucket                              # References the S3 bucket name defined above
+  key    = "serverless.zip"                                                # File name directly in S3 root
+  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip" # Full path to the ZIP file
   //etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip") # Ensures updates only if the file changes
 }
 

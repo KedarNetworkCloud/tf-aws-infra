@@ -378,17 +378,17 @@ resource "aws_launch_template" "kedar_web_app_template" {
     }
   }
 
-# User data (using Secrets Manager for sensitive data)
-user_data = base64encode(templatefile("./ec2InstanceUserData.sh", {
-  DB_HOST         = aws_db_instance.kedar_rds_instance.endpoint,
-  DB_HOST_NO_PORT = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", ""),
-  DB_PASSWORD     = jsondecode(data.aws_secretsmanager_secret_version.db_secret_value.secret_string)["DB_PASSWORD"],  # Retrieve password from secret
-  DB_NAME         = var.RDS_INSTANCE_DB_NAME,
-  DB_USERNAME     = var.RDS_INSTANCE_USERNAME,
-  S3_BUCKET_NAME  = aws_s3_bucket.demo_s3_bucket.bucket,
-  aws_region      = var.aws_region,
-  SNS_TOPIC_ARN   = aws_sns_topic.user_creation_topic.arn
-}))
+  # User data (using Secrets Manager for sensitive data)
+  user_data = base64encode(templatefile("./ec2InstanceUserData.sh", {
+    DB_HOST         = aws_db_instance.kedar_rds_instance.endpoint,
+    DB_HOST_NO_PORT = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", ""),
+    DB_PASSWORD     = jsondecode(data.aws_secretsmanager_secret_version.db_secret_value.secret_string)["DB_PASSWORD"], # Retrieve password from secret
+    DB_NAME         = var.RDS_INSTANCE_DB_NAME,
+    DB_USERNAME     = var.RDS_INSTANCE_USERNAME,
+    S3_BUCKET_NAME  = aws_s3_bucket.demo_s3_bucket.bucket,
+    aws_region      = var.aws_region,
+    SNS_TOPIC_ARN   = aws_sns_topic.user_creation_topic.arn
+  }))
 
 
   # Tags
@@ -497,7 +497,7 @@ resource "aws_db_instance" "kedar_rds_instance" {
   skip_final_snapshot    = true                                       # Skip final snapshot on deletion
   db_name                = var.RDS_INSTANCE_DB_NAME
 
-  username = var.RDS_INSTANCE_USERNAME                                            # Database username
+  username = var.RDS_INSTANCE_USERNAME # Database username
   password = random_password.db_password.result
 
   # Use the custom KMS key for encryption
@@ -840,41 +840,41 @@ resource "aws_s3_bucket" "lambda_bucket" {
 }
 
 resource "aws_s3_object" "lambda_layer_zip" {
-  bucket = aws_s3_bucket.lambda_bucket.bucket                                         # References the S3 bucket name defined above
-  key    = "lambda-layer.zip"                                                         # File name directly in S3 root
-  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip"          # Full path to the ZIP file
-  etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip") # Ensures updates only if the file changes
+  bucket = aws_s3_bucket.lambda_bucket.bucket                                # References the S3 bucket name defined above
+  key    = "lambda-layer.zip"                                                # File name directly in S3 root
+  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip" # Full path to the ZIP file
+  //etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip") # Ensures updates only if the file changes
 }
 
 resource "aws_s3_object" "lambda_function_zip" {
-  bucket = aws_s3_bucket.lambda_bucket.bucket                                       # References the S3 bucket name defined above
-  key    = "serverless.zip"                                                         # File name directly in S3 root
-  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip"          # Full path to the ZIP file
-  etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip") # Ensures updates only if the file changes
+  bucket = aws_s3_bucket.lambda_bucket.bucket                              # References the S3 bucket name defined above
+  key    = "serverless.zip"                                                # File name directly in S3 root
+  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip" # Full path to the ZIP file
+  //etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip") # Ensures updates only if the file changes
 }
 
 resource "aws_kms_key" "ec2_key" {
-  description         = "KMS key for EC2"
-  enable_key_rotation = true
+  description             = "KMS key for EC2"
+  enable_key_rotation     = true
   rotation_period_in_days = 90
 }
 
 
 resource "aws_kms_key" "rds_key" {
-  description         = "KMS key for RDS"
-  enable_key_rotation = true
+  description             = "KMS key for RDS"
+  enable_key_rotation     = true
   rotation_period_in_days = 90
 }
 
 resource "aws_kms_key" "s3_key" {
-  description         = "KMS key for S3 Buckets"
-  enable_key_rotation = true
+  description             = "KMS key for S3 Buckets"
+  enable_key_rotation     = true
   rotation_period_in_days = 90
 }
 
 resource "aws_kms_key" "secrets_key" {
-  description         = "KMS key for Secrets Manager"
-  enable_key_rotation = true
+  description             = "KMS key for Secrets Manager"
+  enable_key_rotation     = true
   rotation_period_in_days = 90
 }
 

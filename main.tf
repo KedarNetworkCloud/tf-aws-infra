@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 provider "aws" {
   profile = var.aws_profile
   region  = var.aws_region
@@ -206,7 +208,7 @@ resource "aws_security_group_rule" "allow_ssh_access" {
 }
 
 
-
+# S3 Bucket resource
 resource "aws_s3_bucket" "demo_s3_bucket" {
   bucket = "demo-s3-bucket-${uuid()}" # Use UUID function for uniqueness
 
@@ -214,6 +216,20 @@ resource "aws_s3_bucket" "demo_s3_bucket" {
     Name = "DemoS3Bucket"
   }
 }
+
+# Server-side encryption configuration for the S3 bucket
+resource "aws_s3_bucket_server_side_encryption_configuration" "demo_s3_bucket_encryption" {
+  bucket = aws_s3_bucket.demo_s3_bucket.bucket
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3_key.arn
+    }
+  }
+}
+
+
 
 resource "aws_s3_bucket_lifecycle_configuration" "lifecycle_rule" {
   bucket = aws_s3_bucket.demo_s3_bucket.id
@@ -329,12 +345,11 @@ resource "aws_iam_instance_profile" "ec2_s3_instance_profile" {
 }
 
 
-# Launch Template for EC2 instances
+# Launch Template for EC2 Instances
 resource "aws_launch_template" "kedar_web_app_template" {
   name        = "kedar-web-app-launch-template"
   description = "Launch template for Kedar's web application"
 
-  # Basic instance settings
   image_id      = var.Kedar_AMI_ID
   instance_type = "t2.micro"
   key_name      = "AWSDEMOROLESSH"
@@ -358,20 +373,23 @@ resource "aws_launch_template" "kedar_web_app_template" {
       volume_size           = 25
       volume_type           = "gp2"
       delete_on_termination = true
+      encrypted             = true
+      kms_key_id            = aws_kms_key.ec2_key.arn
     }
   }
 
-  # User data
-  user_data = base64encode(templatefile("./ec2InstanceUserData.sh", {
-    DB_HOST         = aws_db_instance.kedar_rds_instance.endpoint
-    DB_HOST_NO_PORT = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", "")
-    DB_PASSWORD     = var.RDS_INSTANCE_KEDAR_PASSWORD
-    DB_NAME         = var.RDS_INSTANCE_DB_NAME
-    DB_USERNAME     = var.RDS_INSTANCE_USERNAME
-    S3_BUCKET_NAME  = aws_s3_bucket.demo_s3_bucket.bucket
-    aws_region      = var.aws_region
-    SNS_TOPIC_ARN   = aws_sns_topic.user_creation_topic.arn
-  }))
+# User data (using Secrets Manager for sensitive data)
+user_data = base64encode(templatefile("./ec2InstanceUserData.sh", {
+  DB_HOST         = aws_db_instance.kedar_rds_instance.endpoint,
+  DB_HOST_NO_PORT = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", ""),
+  DB_PASSWORD     = jsondecode(data.aws_secretsmanager_secret_version.db_secret_value.secret_string)["DB_PASSWORD"],  # Retrieve password from secret
+  DB_NAME         = var.RDS_INSTANCE_DB_NAME,
+  DB_USERNAME     = var.RDS_INSTANCE_USERNAME,
+  S3_BUCKET_NAME  = aws_s3_bucket.demo_s3_bucket.bucket,
+  aws_region      = var.aws_region,
+  SNS_TOPIC_ARN   = aws_sns_topic.user_creation_topic.arn
+}))
+
 
   # Tags
   tag_specifications {
@@ -381,10 +399,12 @@ resource "aws_launch_template" "kedar_web_app_template" {
     }
   }
 
-  # Optional dependency
-  depends_on = [aws_db_instance.kedar_rds_instance]
+  # Optional dependency to ensure Secrets Manager is set up before this template
+  depends_on = [
+    aws_db_instance.kedar_rds_instance,
+    aws_secretsmanager_secret_version.db_credentials_version
+  ]
 }
-
 
 
 # RDS Subnet Group for Private Subnet 1 only
@@ -463,26 +483,32 @@ resource "aws_route53_record" "dns_record" {
   }
 }
 
-# Create RDS instance (PostgreSQL example)
+
+# Create RDS instance with encryption and Secrets Manager for password
 resource "aws_db_instance" "kedar_rds_instance" {
   identifier             = var.RDS_INSTANCE_IDENTIFIER # Unique identifier for the RDS instance
   engine                 = var.RDS_INSTANCE_ENGINE     # Database engine
   engine_version         = var.RDS_INSTANCE_ENGINE_VERSION
-  instance_class         = var.RDS_INSTANCE_INSTANCE_CLASS            # Instance type (adjust based on needs)
+  instance_class         = var.RDS_INSTANCE_INSTANCE_CLASS            # Instance type
   allocated_storage      = 20                                         # Amount of storage in GB
-  username               = var.RDS_INSTANCE_USERNAME                  # Database username
-  password               = var.RDS_INSTANCE_KEDAR_PASSWORD            # Password for the database
-  db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name  # Subnet group for the RDS instance
+  db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name  # Subnet group for RDS instance
   vpc_security_group_ids = [aws_security_group.rds_security_group.id] # Security group attached to the instance
-  publicly_accessible    = false                                      # Set to true if you want the instance accessible from the internet
+  publicly_accessible    = false                                      # Set to true if accessible from the internet
   skip_final_snapshot    = true                                       # Skip final snapshot on deletion
   db_name                = var.RDS_INSTANCE_DB_NAME
+
+  username = var.RDS_INSTANCE_USERNAME                                            # Database username
+  password = random_password.db_password.result
+
+  # Use the custom KMS key for encryption
+  storage_encrypted = true
+  kms_key_id        = aws_kms_key.rds_key.arn # KMS key for encrypting the RDS instance
 
   # Use the correct attribute for parameter group
   parameter_group_name = aws_db_parameter_group.db_parameter_group.name
 
   tags = {
-    Name = "KedarRDSInstance" # Tag for identification
+    Name = "KedarRDSInstance"
   }
 }
 
@@ -528,17 +554,24 @@ resource "aws_lb" "app_load_balancer" {
   enable_deletion_protection = false
 }
 
-# Listener for Load Balancer
-resource "aws_lb_listener" "http_listener" {
+# HTTPS Listener for Load Balancer
+resource "aws_lb_listener" "https_listener" {
   load_balancer_arn = aws_lb.app_load_balancer.arn
-  port              = 80
-  protocol          = "HTTP"
+  port              = 443
+  protocol          = "HTTPS"
+
+  # Specify the SSL certificate ARN you just imported
+  #certificate_arn   = "arn:aws:acm:us-east-1:043309350711:certificate/9f7117d7-9900-4dc4-9244-e8c41f8e2f6e"  # Use your CertificateArn here
+  certificate_arn = var.SSL_CERTIFICATE_ARN
+  # Optional: You can define the SSL policy as per your requirements
+  ssl_policy = "ELBSecurityPolicy-2016-08"
 
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app_target_group.arn
   }
 }
+
 
 # Target Group for Load Balancer
 resource "aws_lb_target_group" "app_target_group" {
@@ -562,9 +595,9 @@ resource "aws_autoscaling_group" "kedar_web_app_asg" {
     version = "$Latest"
   }
 
-  min_size         = 3
-  max_size         = 5
-  desired_capacity = 3
+  min_size         = 1
+  max_size         = 1
+  desired_capacity = 1
   vpc_zone_identifier = [
     aws_subnet.public_subnet_1.id
   ]
@@ -660,18 +693,6 @@ resource "aws_lambda_function" "send_email" {
 
   layers = [aws_lambda_layer_version.send_email_dependencies.arn]
 
-  environment {
-    variables = {
-      SENDGRID_API_KEY = var.SENDGRID_API_KEY
-      DOMAIN           = var.DEMO_DOMAIN
-      DB_HOST          = aws_db_instance.kedar_rds_instance.endpoint
-      DB_HOST_NO_PORT  = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", "")
-      DB_PASSWORD      = var.RDS_INSTANCE_KEDAR_PASSWORD
-      DB_NAME          = var.RDS_INSTANCE_DB_NAME
-      DB_USERNAME      = var.RDS_INSTANCE_USERNAME
-    }
-  }
-
   # VPC Configuration
   vpc_config {
     subnet_ids         = [aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id] # Private subnets where RDS resides
@@ -713,8 +734,6 @@ resource "aws_security_group" "lambda_sg" {
     Name = "LambdaSecurityGroup"
   }
 }
-
-
 
 
 resource "aws_iam_role" "lambda_exec" {
@@ -821,17 +840,414 @@ resource "aws_s3_bucket" "lambda_bucket" {
 }
 
 resource "aws_s3_object" "lambda_layer_zip" {
-  bucket = aws_s3_bucket.lambda_bucket.bucket                                # References the S3 bucket name defined above
-  key    = "lambda-layer.zip"                                                # File name directly in S3 root
-  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip" # Full path to the ZIP file
-  //etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip") # Ensures updates only if the file changes
+  bucket = aws_s3_bucket.lambda_bucket.bucket                                         # References the S3 bucket name defined above
+  key    = "lambda-layer.zip"                                                         # File name directly in S3 root
+  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip"          # Full path to the ZIP file
+  etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip") # Ensures updates only if the file changes
 }
 
 resource "aws_s3_object" "lambda_function_zip" {
-  bucket = aws_s3_bucket.lambda_bucket.bucket                              # References the S3 bucket name defined above
-  key    = "serverless.zip"                                                # File name directly in S3 root
-  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip" # Full path to the ZIP file
-  //etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip") # Ensures updates only if the file changes
+  bucket = aws_s3_bucket.lambda_bucket.bucket                                       # References the S3 bucket name defined above
+  key    = "serverless.zip"                                                         # File name directly in S3 root
+  source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip"          # Full path to the ZIP file
+  etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip") # Ensures updates only if the file changes
+}
+
+resource "aws_kms_key" "ec2_key" {
+  description         = "KMS key for EC2"
+  enable_key_rotation = true
+  rotation_period_in_days = 90
+}
+
+
+resource "aws_kms_key" "rds_key" {
+  description         = "KMS key for RDS"
+  enable_key_rotation = true
+  rotation_period_in_days = 90
+}
+
+resource "aws_kms_key" "s3_key" {
+  description         = "KMS key for S3 Buckets"
+  enable_key_rotation = true
+  rotation_period_in_days = 90
+}
+
+resource "aws_kms_key" "secrets_key" {
+  description         = "KMS key for Secrets Manager"
+  enable_key_rotation = true
+  rotation_period_in_days = 90
+}
+
+# Random password for the database
+resource "random_password" "db_password" {
+  length  = 16
+  special = false
+}
+
+# Database Secret: Store all DB credentials in one secret
+resource "aws_secretsmanager_secret" "db_credentials" {
+  name       = "db_credentials"
+  kms_key_id = aws_kms_key.secrets_key.id
+}
+
+resource "aws_secretsmanager_secret_version" "db_credentials_version" {
+  secret_id = aws_secretsmanager_secret.db_credentials.id
+  secret_string = jsonencode({
+    DB_HOST         = aws_db_instance.kedar_rds_instance.endpoint,
+    DB_HOST_NO_PORT = replace(aws_db_instance.kedar_rds_instance.endpoint, ":5432", ""),
+    DB_PASSWORD     = random_password.db_password.result,
+    DB_NAME         = var.RDS_INSTANCE_DB_NAME,
+    DB_USERNAME     = var.RDS_INSTANCE_USERNAME
+  })
+}
+
+# Email Service Secret
+resource "aws_secretsmanager_secret" "email_credentials" {
+  name       = "email_service_credentials"
+  kms_key_id = aws_kms_key.secrets_key.id
+}
+
+resource "aws_secretsmanager_secret_version" "email_secret_version" {
+  secret_id     = aws_secretsmanager_secret.email_credentials.id
+  secret_string = var.SENDGRID_API_KEY
+}
+
+# Fetch the latest version of DB credentials (for example usage)
+data "aws_secretsmanager_secret_version" "db_secret_value" {
+  secret_id = aws_secretsmanager_secret.db_credentials.id
+  depends_on = [
+    aws_secretsmanager_secret_version.db_credentials_version
+  ]
+}
+
+# Secret for DOMAIN
+resource "aws_secretsmanager_secret" "domain_secret" {
+  name       = "domain_secret"
+  kms_key_id = aws_kms_key.secrets_key.id
+}
+
+resource "aws_secretsmanager_secret_version" "domain_secret_version" {
+  secret_id     = aws_secretsmanager_secret.domain_secret.id
+  secret_string = var.DEMO_DOMAIN
+}
+
+
+resource "aws_iam_policy" "lambda_secrets_policy" {
+  name        = "lambda-secrets-access-policy"
+  description = "Policy to allow Lambda access to Secrets Manager and decrypt using a customer-managed KMS key"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "secretsmanager:GetSecretValue"
+        Resource = [
+          aws_secretsmanager_secret.db_credentials.arn,
+          aws_secretsmanager_secret.email_credentials.arn,
+          aws_secretsmanager_secret.domain_secret.arn
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = aws_kms_key.secrets_key.arn # Decrypt permission for the customer-managed KMS key
+      }
+    ]
+  })
+}
+
+
+resource "aws_iam_role_policy_attachment" "attach_lambda_secrets_policy" {
+  policy_arn = aws_iam_policy.lambda_secrets_policy.arn
+  role       = aws_iam_role.lambda_exec.name
+}
+
+
+resource "aws_iam_policy" "ec2_secrets_access_policy" {
+  name        = "EC2SecretsManagerAccessPolicy"
+  description = "Policy to allow EC2 to access Secrets Manager for RDS credentials and decrypt using a customer-managed KMS key"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ],
+        Resource = aws_secretsmanager_secret.db_credentials.arn
+      },
+      {
+        Effect   = "Allow",
+        Action   = "kms:Decrypt",
+        Resource = aws_kms_key.secrets_key.arn # Decrypt permission for the custom KMS key used for secrets
+      },
+      {
+        Effect   = "Allow",
+        Action   = "kms:Decrypt",
+        Resource = aws_kms_key.ec2_key.arn # Decrypt permission for the KMS key used for EBS volume encryption
+      }
+    ]
+  })
+}
+
+
+resource "aws_iam_role_policy_attachment" "attach_secrets_policy_to_ec2" {
+  role       = aws_iam_role.ec2_s3_access_role.name
+  policy_arn = aws_iam_policy.ec2_secrets_access_policy.arn
+}
+
+
+resource "aws_kms_key_policy" "rds_key_policy" {
+  key_id = aws_kms_key.rds_key.id
+  policy = jsonencode({
+    "Id" : "key-for-ebs",
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "Enable IAM User Permissions",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        "Action" : "kms:*",
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow access for Key Administrators",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*",
+          "kms:Delete*",
+          "kms:TagResource",
+          "kms:UntagResource",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ],
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow use of the key",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        "Resource" : "*"
+      }
+    ]
+  })
+}
+resource "aws_kms_key_policy" "ec2_kms_key_policy" {
+  key_id = aws_kms_key.ec2_key.key_id
+  policy = jsonencode({
+    "Id" : "key-for-ebs",
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "Enable IAM User Permissions",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        "Action" : "kms:*",
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow access for Key Administrators",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*",
+          "kms:Delete*",
+          "kms:TagResource",
+          "kms:UntagResource",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ],
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow use of the key",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow attachment of persistent resources",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:CreateGrant",
+          "kms:ListGrants",
+          "kms:RevokeGrant"
+        ],
+        "Resource" : "*",
+        "Condition" : {
+          "Bool" : {
+            "kms:GrantIsForAWSResource" : "true"
+          }
+        }
+      }
+    ]
+  })
+}
+
+
+resource "aws_kms_key_policy" "secret_manager_key_policy" {
+  key_id = aws_kms_key.secrets_key.id
+  policy = jsonencode({
+    "Id" : "key-for-ebs",
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "Enable IAM User Permissions",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        "Action" : "kms:*",
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow access for Key Administrators",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*",
+          "kms:Delete*",
+          "kms:TagResource",
+          "kms:UntagResource",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ],
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow use of the key",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        "Resource" : "*"
+      }
+    ]
+  })
+}
+
+resource "aws_kms_key_policy" "s3_key_policy" {
+  key_id = aws_kms_key.s3_key.id
+  policy = jsonencode({
+    "Id" : "key-for-ebs",
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "Enable IAM User Permissions",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        "Action" : "kms:*",
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow access for Key Administrators",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*",
+          "kms:Delete*",
+          "kms:TagResource",
+          "kms:UntagResource",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ],
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow use of the key",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        "Resource" : "*"
+      }
+    ]
+  })
 }
 
 

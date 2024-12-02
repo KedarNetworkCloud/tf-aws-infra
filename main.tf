@@ -217,18 +217,6 @@ resource "aws_s3_bucket" "demo_s3_bucket" {
   }
 }
 
-# Server-side encryption configuration for the S3 bucket
-resource "aws_s3_bucket_server_side_encryption_configuration" "demo_s3_bucket_encryption" {
-  bucket = aws_s3_bucket.demo_s3_bucket.bucket
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm     = "aws:kms"
-      kms_master_key_id = aws_kms_key.s3_key.arn
-    }
-  }
-}
-
 
 
 resource "aws_s3_bucket_lifecycle_configuration" "lifecycle_rule" {
@@ -260,6 +248,34 @@ resource "aws_iam_role" "ec2_s3_access_role" {
       }
     ]
   })
+}
+
+
+resource "aws_iam_policy" "kms_access_policy" {
+  name        = "KMSAccessPolicy"
+  description = "Allows the EC2 role to use the KMS key for S3"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "arn:aws:kms:us-east-1:${data.aws_caller_identity.current.account_id}:key/${aws_kms_key.s3_bucket_key.key_id}"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "attach_kms_policy" {
+  policy_arn = aws_iam_policy.kms_access_policy.arn
+  role       = aws_iam_role.ec2_s3_access_role.name
 }
 
 resource "aws_iam_policy" "s3_access_policy" {
@@ -866,7 +882,7 @@ resource "aws_kms_key" "rds_key" {
   rotation_period_in_days = 90
 }
 
-resource "aws_kms_key" "s3_key" {
+resource "aws_kms_key" "s3_bucket_key" {
   description             = "KMS key for S3 Buckets"
   enable_key_rotation     = true
   rotation_period_in_days = 90
@@ -1191,63 +1207,4 @@ resource "aws_kms_key_policy" "secret_manager_key_policy" {
     ]
   })
 }
-
-resource "aws_kms_key_policy" "s3_key_policy" {
-  key_id = aws_kms_key.s3_key.id
-  policy = jsonencode({
-    "Id" : "key-for-ebs",
-    "Version" : "2012-10-17",
-    "Statement" : [
-      {
-        "Sid" : "Enable IAM User Permissions",
-        "Effect" : "Allow",
-        "Principal" : {
-          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-        },
-        "Action" : "kms:*",
-        "Resource" : "*"
-      },
-      {
-        "Sid" : "Allow access for Key Administrators",
-        "Effect" : "Allow",
-        "Principal" : {
-          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
-        },
-        "Action" : [
-          "kms:Create*",
-          "kms:Describe*",
-          "kms:Enable*",
-          "kms:List*",
-          "kms:Put*",
-          "kms:Update*",
-          "kms:Revoke*",
-          "kms:Disable*",
-          "kms:Get*",
-          "kms:Delete*",
-          "kms:TagResource",
-          "kms:UntagResource",
-          "kms:ScheduleKeyDeletion",
-          "kms:CancelKeyDeletion"
-        ],
-        "Resource" : "*"
-      },
-      {
-        "Sid" : "Allow use of the key",
-        "Effect" : "Allow",
-        "Principal" : {
-          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
-        },
-        "Action" : [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:ReEncrypt*",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey"
-        ],
-        "Resource" : "*"
-      }
-    ]
-  })
-}
-
 

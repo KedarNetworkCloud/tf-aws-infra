@@ -217,6 +217,17 @@ resource "aws_s3_bucket" "demo_s3_bucket" {
   }
 }
 
+resource "aws_s3_bucket_server_side_encryption_configuration" "s3_key_encryption" {
+  bucket = aws_s3_bucket.demo_s3_bucket.id
+  rule {
+    apply_server_side_encryption_by_default {
+      # sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3_bucket_key.arn
+    }
+  }
+}
+
 
 
 resource "aws_s3_bucket_lifecycle_configuration" "lifecycle_rule" {
@@ -261,10 +272,9 @@ resource "aws_iam_policy" "kms_access_policy" {
       {
         Effect = "Allow"
         Action = [
+          "kms:GenerateDataKey",
           "kms:Encrypt",
           "kms:Decrypt",
-          "kms:ReEncrypt*",
-          "kms:GenerateDataKey*",
           "kms:DescribeKey"
         ]
         Resource = "arn:aws:kms:us-east-1:${data.aws_caller_identity.current.account_id}:key/${aws_kms_key.s3_bucket_key.key_id}"
@@ -859,14 +869,14 @@ resource "aws_s3_object" "lambda_layer_zip" {
   bucket = aws_s3_bucket.lambda_bucket.bucket                                # References the S3 bucket name defined above
   key    = "lambda-layer.zip"                                                # File name directly in S3 root
   source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip" # Full path to the ZIP file
-  //etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip") # Ensures updates only if the file changes
+  etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\lambda-layer.zip") # Ensures updates only if the file changes
 }
 
 resource "aws_s3_object" "lambda_function_zip" {
   bucket = aws_s3_bucket.lambda_bucket.bucket                              # References the S3 bucket name defined above
   key    = "serverless.zip"                                                # File name directly in S3 root
   source = "C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip" # Full path to the ZIP file
-  //etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip") # Ensures updates only if the file changes
+  etag   = filemd5("C:\\Users\\kedar\\Music\\LAMBDAFOLDERSFORASS8\\serverless.zip") # Ensures updates only if the file changes
 }
 
 resource "aws_kms_key" "ec2_key" {
@@ -1207,4 +1217,78 @@ resource "aws_kms_key_policy" "secret_manager_key_policy" {
     ]
   })
 }
+
+resource "aws_kms_key_policy" "s3_key_policy" {
+  key_id = aws_kms_key.s3_bucket_key.id
+  policy = jsonencode({
+    "Id" : "key-for-ebs",
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "Enable IAM User Permissions",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        "Action" : "kms:*",
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow access for Key Administrators",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*",
+          "kms:Delete*",
+          "kms:TagResource",
+          "kms:UntagResource",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ],
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow use of the key",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+        },
+        "Action" : [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "AllowEC2RoleToUseKey",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : aws_iam_role.ec2_s3_access_role.arn
+        },
+        "Action" : [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        "Resource" : "*"
+      }
+    ]
+  })
+}
+
 
